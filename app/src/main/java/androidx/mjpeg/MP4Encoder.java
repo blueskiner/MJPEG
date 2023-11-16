@@ -1,5 +1,6 @@
 package androidx.mjpeg;
 
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -62,6 +63,8 @@ public class MP4Encoder {
     private boolean debug = false;
     //MP4编码监听
     private OnMP4EncodeListener onMP4EncodeListener;
+    private int frameIndex = -1;
+    private int frameRate;
 
     /**
      * 设置调试模式
@@ -80,7 +83,7 @@ public class MP4Encoder {
      * @param height 视频编码高度
      */
     public MP4Encoder(String path, int width, int height) {
-        this(path, width, height, 15, 100000, 60);
+        this(path, width, height, 25, 1000000, 1);
     }
 
     /**
@@ -102,6 +105,7 @@ public class MP4Encoder {
     public MP4Encoder(String path, int width, int height, int frameRate, int bitRate, int iFrameInterval) {
         this.width = width;
         this.height = height;
+        this.frameRate = frameRate;
         service = Executors.newCachedThreadPool();
         try {
             mediaCodec = MediaCodec.createEncoderByType(MIME_TYPE);
@@ -137,11 +141,15 @@ public class MP4Encoder {
                 int ibIndex = mediaCodec.dequeueInputBuffer(DEFAULT_TIMEOUT_US);
                 startTime = System.currentTimeMillis();
                 if (ibIndex >= 0) {
+                    frameIndex++;
                     ByteBuffer inputBuffer = mediaCodec.getInputBuffer(ibIndex);
                     inputBuffer.clear();
-                    byte[] buffer = YUVCodec.getNV12(colorFormat, width, height, BitmapFactory.decodeByteArray(data, 0, data.length));
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length,options);
+                    byte[] buffer = YUVCodec.getNV12(colorFormat, width, height, bitmap);
                     inputBuffer.put(buffer);
-                    long presentationTimeUs = (System.nanoTime() - startTime) / 1000;
+                    long presentationTimeUs = (long) (frameIndex * 1000000L / frameRate);
                     int flags = endFlag ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0;
                     //放回ByteBuffer队列
                     mediaCodec.queueInputBuffer(ibIndex, 0, buffer.length, presentationTimeUs, flags);

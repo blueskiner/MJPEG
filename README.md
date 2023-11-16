@@ -21,7 +21,7 @@ allprojects {
 2./app/build.grade
 ```
 dependencies {
-	implementation 'com.github.RelinRan:MJPEG:2022.2023.10.17.1'
+	implementation 'com.github.RelinRan:MJPEG:2022.2023.11.16.1'
 }
 ```
 #### 初始化
