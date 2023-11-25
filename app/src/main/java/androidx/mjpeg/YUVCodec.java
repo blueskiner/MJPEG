@@ -85,68 +85,31 @@ public class YUVCodec {
      * 获取NV12编码数据
      *
      * @param colorFormat 媒体颜色格式
-     * @param inputWidth  输入宽度
-     * @param inputHeight 输入高度
+     * @param width       输入宽度
+     * @param height      输入高度
      * @param bitmap      位图
      * @return
      */
-    public static byte[] getNV12(int colorFormat, int inputWidth, int inputHeight, Bitmap bitmap) {
-        int[] argb = new int[inputWidth * inputHeight];
-        bitmap.getPixels(argb, 0, inputWidth, 0, 0, inputWidth, inputHeight);
-        byte[] yuv = new byte[inputWidth * inputHeight * 3 / 2];
+    public static byte[] getNV12(int colorFormat, int width, int height, Bitmap bitmap) {
+        int[] argb = new int[width * height];
+        bitmap.getPixels(argb, 0, width, 0, 0, width, height);
         switch (colorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible:
-                encodeYUV420P(yuv, argb, inputWidth, inputHeight);
-                break;
+                return toYUV420P(argb, width, height);
         }
-        return yuv;
+        return new byte[width * height * 3 / 2];
     }
 
     /**
-     * YUV420P编码
+     * 转YUV420SP/NV12
      *
-     * @param yuv420sp yuv420sp字节
-     * @param argb     argb字节
-     * @param width    图像宽度
-     * @param height   图像高度
+     * @param argb   argb字节
+     * @param width  图像宽度
+     * @param height 图像高度
+     * @return
      */
-    public static void encodeYUV420P(byte[] yuv420sp, int[] argb, int width, int height) {
-        final int frameSize = width * height;
-        int yIndex = 0;
-        int uIndex = frameSize;
-        int vIndex = frameSize + width * height / 4;
-        int a, R, G, B, Y, U, V;
-        int index = 0;
-        for (int j = 0; j < height; j++) {
-            for (int i = 0; i < width; i++) {
-                a = (argb[index] & 0xff000000) >> 24; // a is not used obviously
-                R = (argb[index] & 0xff0000) >> 16;
-                G = (argb[index] & 0xff00) >> 8;
-                B = (argb[index] & 0xff) >> 0;
-                // well known RGB to YUV algorithm
-                Y = ((66 * R + 129 * G + 25 * B + 128) >> 8) + 16;
-                V = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128; // Previously U
-                U = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128; // Previously V
-
-                yuv420sp[yIndex++] = (byte) ((Y < 0) ? 0 : ((Y > 255) ? 255 : Y));
-                if (j % 2 == 0 && index % 2 == 0) {
-                    yuv420sp[vIndex++] = (byte) ((U < 0) ? 0 : ((U > 255) ? 255 : U));
-                    yuv420sp[uIndex++] = (byte) ((V < 0) ? 0 : ((V > 255) ? 255 : V));
-                }
-                index++;
-            }
-        }
-    }
-
-    /**
-     * YUV420SP编码
-     *
-     * @param yuv420sp yuv420sp字节
-     * @param argb     argb字节
-     * @param width    图像宽度
-     * @param height   图像高度
-     */
-    public static void encodeYUV420SP(byte[] yuv420sp, int[] argb, int width, int height) {
+    public static byte[] toYUV420SP(int[] argb, int width, int height) {
+        byte[] data = new byte[width * height * 3 / 2];
         final int frameSize = width * height;
         int yIndex = 0;
         int uvIndex = frameSize;
@@ -154,22 +117,67 @@ public class YUVCodec {
         int index = 0;
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
-                a = (argb[index] & 0xff000000) >> 24; // a is not used obviously
+                a = (argb[index] & 0xff000000) >> 24;
                 R = (argb[index] & 0xff0000) >> 16;
                 G = (argb[index] & 0xff00) >> 8;
                 B = (argb[index] & 0xff) >> 0;
-                // well known RGB to YUV algorithm
                 Y = ((66 * R + 129 * G + 25 * B + 128) >> 8) + 16;
-                V = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128; // Previously U
-                U = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128; // Previously V
-                yuv420sp[yIndex++] = (byte) ((Y < 0) ? 0 : ((Y > 255) ? 255 : Y));
+                V = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128;
+                U = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128;
+                Y = Math.max(0, Math.min(Y, 255));
+                V = Math.max(0, Math.min(V, 255));
+                U = Math.max(0, Math.min(U, 255));
+                data[yIndex++] = (byte) Y;
                 if (j % 2 == 0 && index % 2 == 0) {
-                    yuv420sp[uvIndex++] = (byte) ((V < 0) ? 0 : ((V > 255) ? 255 : V));
-                    yuv420sp[uvIndex++] = (byte) ((U < 0) ? 0 : ((U > 255) ? 255 : U));
+                    data[uvIndex++] = (byte) V;
+                    data[uvIndex++] = (byte) U;
                 }
                 index++;
             }
         }
+        return data;
     }
 
+    /**
+     * 转YUV420P/1420/YU12
+     *
+     * @param argb   argb字节
+     * @param width  图像宽度
+     * @param height 图像高度
+     * @return
+     */
+    public static byte[] toYUV420P(int[] argb, int width, int height) {
+        byte[] data = new byte[width * height * 3 / 2];
+        final int frameSize = width * height;
+        int yIndex = 0;
+        int uIndex = frameSize;
+        int vIndex = frameSize + frameSize / 4;
+        int R, G, B, Y, U, V;
+        int index = 0;
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                R = (argb[index] & 0xff0000) >> 16;
+                G = (argb[index] & 0xff00) >> 8;
+                B = (argb[index] & 0xff) >> 0;
+                Y = ((66 * R + 129 * G + 25 * B + 128) >> 8) + 16;
+                V = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128;
+                U = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128;
+                Y = Math.max(0, Math.min(Y, 255));
+                V = Math.max(0, Math.min(V, 255));
+                U = Math.max(0, Math.min(U, 255));
+                data[yIndex + i] = (byte) Y;
+                if (i % 2 == 0 && j % 2 == 0) {
+                    data[uIndex + i / 2] = (byte) V;
+                    data[vIndex + i / 2] = (byte) U;
+                }
+                index++;
+            }
+            yIndex += width;
+            if (j % 2 == 1) {
+                uIndex += width / 2;
+                vIndex += width / 2;
+            }
+        }
+        return data;
+    }
 }
